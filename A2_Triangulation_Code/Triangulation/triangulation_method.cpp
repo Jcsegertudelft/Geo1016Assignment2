@@ -30,6 +30,97 @@
 using namespace easy3d;
 
 
+
+
+Matrix33 Normalization_Matrix(const std::vector<Vector2D>& points)
+{
+    //Calculate Mean
+    double mean_x = 0;
+    double mean_y = 0;
+    int num_points = points.size();
+    for (int i = 0; i < num_points; i++){
+        mean_x += points[i].x();
+        mean_y += points[i].y();
+    }
+    mean_x /= num_points;
+    mean_y /= num_points;
+    Vector2D mean_point(mean_x,mean_y);
+
+    //Calculate mean distance from Mean
+    double mean_dist = 0;
+    for (int i = 0; i < num_points; i++){
+        mean_dist += distance(points[i],mean_point);
+    }
+    mean_dist /= num_points;
+
+    //Construct Transformation matrix
+    double scale_factor = sqrt(2)/mean_dist;
+    Matrix33 T( scale_factor, 0 ,           -mean_x*scale_factor,
+                0,            scale_factor, -mean_y*scale_factor,
+                0,            0 ,           1);
+
+    return T;
+}
+
+std::vector<Vector2D> Normalize_points(const std::vector<Vector2D>& points,
+    const Matrix33& norm_matrix){
+    //Create copy with same shape
+    std::vector<Vector2D> norm_points;
+    //For each point norm_matrix * point = normalized point
+    for (int i = 0; i < points.size(); i++){
+        Vector3D point = points[i].homogeneous();
+        Vector3D p = norm_matrix * point;
+        norm_points.push_back(p);
+    }
+    return norm_points;
+};
+
+Matrix33 EstimateFundamentalMatrix(
+    const std::vector<Vector2D>& points_0, /// input: 2D image points in the 1st image
+    const std::vector<Vector2D>& points_1  /// input: 2D image points in the 2nd image
+)
+{
+    // Set up matrix W
+    int num_rows = points_0.size();
+    int num_cols = 9;
+
+    Matrix W(num_rows, num_cols, 0.0);
+    for (int i = 0; i < num_rows; ++i)
+    {
+        double u0 = points_0[i].x();
+        double v0 = points_0[i].y();
+        double u1 = points_1[i].x();
+        double v1 = points_1[i].y();
+        W.set_row(i, {u0*u1, v0*u1, u1, u0*v1, v0*v1, v1, u0, v0, 1});
+    }
+
+    // Singular value decomposition of matrix W
+    Matrix U(num_rows, num_rows, 0.0);
+    Matrix S(num_rows, num_cols, 0.0);
+    Matrix V(num_cols, num_cols, 0.0);
+
+    svd_decompose(W, U, S, V);
+
+    // Set up the Rank 3 version of F
+    Vector f = V.get_column(V.cols() - 1);
+
+    Matrix33 F_rank3(f[0],f[1],f[2],
+                     f[3],f[4],f[5],
+                     f[6],f[7],f[8]);
+    Matrix33 U2;
+    Matrix33 D2;
+    Matrix33 V2;
+
+    svd_decompose(F_rank3, U2, D2, V2);
+    //Note that the singular values in D2 are already sorted in descending order per the description
+    //in matrix_algo.h
+    D2.set(2,2,0);
+
+    //Calculate the rank 2 Matrix F
+    Matrix33 F = U2 * D2 * V2.transpose();
+    return F;
+};
+
 /**
  * TODO: Finish this function for reconstructing 3D geometry from corresponding image points.
  * @return True on success, otherwise false. On success, the reconstructed 3D points must be written to 'points_3d'
@@ -103,21 +194,21 @@ bool Triangulation::triangulation(
     M.set_column(1, Vector3D(5.5, 5.5, 5.5));
 
     /// define a 15 by 9 matrix (and all elements initialized to 0.0)
-    Matrix W(15, 9, 0.0);
+    Matrix WH(15, 9, 0.0);
     /// set the first row by a 9-dimensional vector
-    W.set_row(0, {0, 1, 2, 3, 4, 5, 6, 7, 8}); // {....} is equivalent to a std::vector<double>
+    WH.set_row(0, {0, 1, 2, 3, 4, 5, 6, 7, 8}); // {....} is equivalent to a std::vector<double>
 
     /// get the number of rows.
-    int num_rows = W.rows();
+    int num_rows = WH.rows();
 
     /// get the number of columns.
-    int num_cols = W.cols();
+    int num_cols = WH.cols();
 
     /// get the the element at row 1 and column 2
-    double value = W(1, 2);
+    double value = WH(1, 2);
 
     /// get the last column of a matrix
-    Vector last_column = W.get_column(W.cols() - 1);
+    Vector last_column = WH.get_column(WH.cols() - 1);
 
     /// define a 3 by 3 identity matrix
     Matrix33 I = Matrix::identity(3, 3, 1.0);
@@ -132,12 +223,58 @@ bool Triangulation::triangulation(
     //--------------------------------------------------------------------------------------------------------------
     // implementation starts ...
 
-    // TODO: check if the input is valid (always good because you never known how others will call your function).
+    // Input validity check
+    if (points_0.size() != points_1.size()){
+        std::cerr << "Sizes of Matching points don't match" << std::endl;
+        return false;
+    }
+
+    if (points_0.size() < 8){
+        std::cerr << "At least 8 corresponding points needed" << std::endl;
+        return false;
+    }
 
     // TODO: Estimate relative pose of two views. This can be subdivided into
-    //      - estimate the fundamental matrix F;
+    //      - estimate the fundamental matrix F; DONE
     //      - compute the essential matrix E;
     //      - recover rotation R and t.
+
+    //Normalize the points and obtain the Matrices needed for denormalization
+    Matrix33 T0 = Normalization_Matrix(points_0);
+    std::vector<Vector2D> norm_points_0 = Normalize_points(points_0, T0);
+    Matrix33 T1 = Normalization_Matrix(points_1);
+    std::vector<Vector2D> norm_points_1 = Normalize_points(points_1, T1);
+
+    //Estimate the normalized fundamental matrix and denormalize it
+    Matrix33 F_norm = EstimateFundamentalMatrix(norm_points_0, norm_points_1);
+    Matrix33 F = T1.transpose() * F_norm * T0;
+    std::cout << F << std::endl;
+
+    //Construct the matrix K, same for both cameras
+    Matrix33 K(fx, s, cx,
+               0, fy, cy,
+               0,  0,  1);
+    //Calculate Essential Matrix E
+    Matrix33 E = K.transpose() * F * K;
+
+    Matrix33 W( 0,-1,0,
+                1,0,0,
+                0,0,1);
+
+    //SVD of E for recovery R and T
+    Matrix33 U;
+    Matrix33 D;
+    Matrix33 V;
+    svd_decompose(E,U,D,V);
+    Matrix33 UWV_T = U*W*V.transpose();
+    Matrix33 UW_TV_T = U*W.transpose()*V.transpose();
+
+    Matrix33 R1 = determinant(UWV_T)*UWV_T;
+    Matrix33 R2 = determinant(UW_TV_T)*UW_TV_T;
+
+    Vector3D t1 = U.get_column(2);
+    Vector3D t2 = -U.get_column(2);
+
 
     // TODO: Reconstruct 3D points. The main task is
     //      - triangulate a pair of image points (i.e., compute the 3D coordinates for each corresponding point pair)
