@@ -120,7 +120,70 @@ Matrix33 EstimateFundamentalMatrix(
     Matrix33 F = U2 * D2 * V2.transpose();
     return F;
 };
+//Triangulation of Points
+Vector3D TriangulatePoint(
+    const Vector2D& p0,
+    const Vector2D& p1,
+    const Matrix34& P0,
+    const Matrix34& P1
+)
+{
+    Matrix A(4, 4, 0.0);
 
+    for (int j = 0; j < 4; ++j) {
+        A(0, j) = p0.x() * P0(2, j) - P0(0, j);
+        A(1, j) = p0.y() * P0(2, j) - P0(1, j);
+        A(2, j) = p1.x() * P1(2, j) - P1(0, j);
+        A(3, j) = p1.y() * P1(2, j) - P1(1, j);
+    }
+    Matrix U(4, 4, 0.0);
+    Matrix S(4, 4, 0.0);
+    Matrix V(4, 4, 0.0);
+    svd_decompose(A, U, S, V);
+
+    Vector Xh = V.get_column(3);
+
+    if (std::abs(Xh[3]) < 1e-12)
+        return Vector3D(0.0, 0.0, 0.0);
+
+    return Vector3D(
+        Xh[0] / Xh[3],
+        Xh[1] / Xh[3],
+        Xh[2] / Xh[3]
+    );
+}
+
+std::vector<Vector3D> TriangulateAllPoints(
+    const std::vector<Vector2D>& points_0,
+    const std::vector<Vector2D>& points_1,
+    const Matrix33& K,
+    const Matrix33& R,
+    const Vector3D& t
+)
+{
+    std::vector<Vector3D> reconstructed_points;
+
+    Matrix34 P0_cam(
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0
+    );
+    Matrix34 P0 = K * P0_cam;
+
+    Matrix34 P1_cam(
+        R(0, 0), R(0, 1), R(0, 2), t[0],
+        R(1, 0), R(1, 1), R(1, 2), t[1],
+        R(2, 0), R(2, 1), R(2, 2), t[2]
+    );
+    Matrix34 P1 = K * P1_cam;
+
+    for (int i = 0; i < points_0.size(); ++i) {
+        Vector3D X = TriangulatePoint(points_0[i], points_1[i], P0, P1);
+        reconstructed_points.push_back(X);
+    }
+
+    return reconstructed_points;
+}
 /**
  * TODO: Finish this function for reconstructing 3D geometry from corresponding image points.
  * @return True on success, otherwise false. On success, the reconstructed 3D points must be written to 'points_3d'
