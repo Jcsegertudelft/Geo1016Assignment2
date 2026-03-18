@@ -62,7 +62,8 @@ Matrix33 Normalization_Matrix(const std::vector<Vector2D>& points)
     return T;
 }
 
-std::vector<Vector2D> Normalize_points(const std::vector<Vector2D>& points,
+std::vector<Vector2D> Normalize_points(
+    const std::vector<Vector2D>& points,
     const Matrix33& norm_matrix){
     //Create copy with same shape
     std::vector<Vector2D> norm_points;
@@ -124,17 +125,17 @@ Matrix33 EstimateFundamentalMatrix(
 Vector3D TriangulatePoint(
     const Vector2D& p0,
     const Vector2D& p1,
-    const Matrix34& P0,
-    const Matrix34& P1
+    const Matrix34& M0,
+    const Matrix34& M1
 )
 {
     Matrix A(4, 4, 0.0);
 
     for (int j = 0; j < 4; ++j) {
-        A(0, j) = p0.x() * P0(2, j) - P0(0, j);
-        A(1, j) = p0.y() * P0(2, j) - P0(1, j);
-        A(2, j) = p1.x() * P1(2, j) - P1(0, j);
-        A(3, j) = p1.y() * P1(2, j) - P1(1, j);
+        A(0, j) = p0.x() * M0(2, j) - M0(0, j);
+        A(1, j) = p0.y() * M0(2, j) - M0(1, j);
+        A(2, j) = p1.x() * M1(2, j) - M1(0, j);
+        A(3, j) = p1.y() * M1(2, j) - M1(1, j);
     }
     Matrix U(4, 4, 0.0);
     Matrix S(4, 4, 0.0);
