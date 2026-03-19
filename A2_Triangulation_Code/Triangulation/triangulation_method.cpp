@@ -26,6 +26,8 @@
 #include "matrix_algo.h"
 #include <easy3d/optimizer/optimizer_lm.h>
 
+#include "Eigen/src/Core/Matrix.h"
+
 
 using namespace easy3d;
 
@@ -121,6 +123,7 @@ Matrix33 EstimateFundamentalMatrix(
     Matrix33 F = U2 * D2 * V2.transpose();
     return F;
 };
+
 //Triangulation of Points
 Vector3D TriangulatePoint(
     const Vector2D& p0,
@@ -161,6 +164,7 @@ std::vector<Vector3D> TriangulateAllPoints(
     const Matrix33& R,
     const Vector3D& t
 )
+
 {
     std::vector<Vector3D> reconstructed_points;
 
@@ -182,7 +186,6 @@ std::vector<Vector3D> TriangulateAllPoints(
         Vector3D X = TriangulatePoint(points_0[i], points_1[i], P0, P1);
         reconstructed_points.push_back(X);
     }
-
     return reconstructed_points;
 }
 /**
@@ -199,8 +202,7 @@ bool Triangulation::triangulation(
         std::vector<Vector3D> &points_3d,       /// output: reconstructed 3D points
         Matrix33 &R,   /// output: 3 by 3 matrix, which is the recovered rotation of the 2nd camera
         Vector3D &t    /// output: 3D vector, which is the recovered translation of the 2nd camera
-) const
-{
+) const {
     /// NOTE: there might be multiple workflows for reconstructing 3D geometry from corresponding image points.
     ///       This assignment uses the commonly used one explained in our lecture.
     ///       It is advised to define a function for the sub-tasks. This way you have a clean and well-structured
@@ -343,6 +345,99 @@ bool Triangulation::triangulation(
     // TODO: Reconstruct 3D points. The main task is
     //      - triangulate a pair of image points (i.e., compute the 3D coordinates for each corresponding point pair)
 
+    //Cheirality check
+    std::vector<Vector3D> points_3d_r1t1;
+    std::vector<Vector3D> points_3d_r1t2;
+    std::vector<Vector3D> points_3d_r2t1;
+    std::vector<Vector3D> points_3d_r2t2;
+
+    points_3d_r1t1 = TriangulateAllPoints(points_0,points_1,K,R1,t1);
+    points_3d_r1t2 = TriangulateAllPoints(points_0,points_1,K,R1,t2);
+    points_3d_r2t1 = TriangulateAllPoints(points_0,points_1,K,R2,t1);
+    points_3d_r2t2 = TriangulateAllPoints(points_0,points_1,K,R2,t2);
+
+    int count[4]={0};
+
+    for(int i = 0; i < points_3d_r1t1.size(); ++i) {
+        Vector3D X = points_3d_r1t1[i];
+        // Check 1: Front of camera 1 ?
+        if (X.z() <= 0) {
+            continue;
+        }
+        // Check 2: Front of Camera 2?
+        Vector3D X_c2 = R1 * X + t1;
+        if (X_c2.z() > 0) {
+            count[0]++;
+        }
+    }
+
+    for(int i = 0; i < points_3d_r1t2.size(); ++i) {
+        Vector3D X = points_3d_r1t2[i];
+        // Check 1: Front of camera 1 ?
+        if (X.z() <= 0) {
+            continue;
+        }
+        // Check 2: Front of Camera 2?
+        Vector3D X_c2 = R1 * X + t2;
+        if (X_c2.z() > 0) {
+            count[1]++;
+        }
+    }
+
+    for(int i = 0; i < points_3d_r2t1.size(); ++i) {
+        Vector3D X = points_3d_r2t1[i];
+        // Check 1: Front of camera 1 ?
+        if (X.z() <= 0) {
+            continue;
+        }
+        // Check 2: Front of Camera 2?
+        Vector3D X_c2 = R2 * X + t1;
+        if (X_c2.z() > 0) {
+            count[2]++;
+        }
+    }
+
+    for(int i = 0; i < points_3d_r2t2.size(); ++i) {
+        Vector3D X = points_3d_r2t2[i];
+        // Check 1: Front of camera 1 ?
+        if (X.z() <= 0) {
+            continue;
+        }
+        // Check 2: Front of Camera 2?
+        Vector3D X_c2 = R2 * X + t2;
+        if (X_c2.z() > 0) {
+            count[3]++;
+        }
+    }
+    int idx=0,big=0;
+    for(int i=0;i<4;i++) {
+        if (count[i] > big) {
+            big = count[i];
+            idx = i;
+        }
+    }
+    if (idx==0) {
+        points_3d=points_3d_r1t1;
+        R=R1;
+        t=t1;
+    }
+
+    else if (idx==1) {
+        points_3d=points_3d_r1t2;
+        R=R1;
+        t=t2;
+    }
+    else if (idx==2) {
+        points_3d=points_3d_r2t1;
+        R=R2;
+        t=t1;
+    }
+    else if (idx==3) {
+        points_3d=points_3d_r2t2;
+        R=R2;
+        t=t2;
+    }
+
     // TODO: Don't forget to
     //          - write your recovered 3D points into 'points_3d' (so the viewer can visualize the 3D points for you);
     //          - write the recovered relative pose into R and t (the view will be updated as seen from the 2nd camera,
@@ -353,5 +448,5 @@ bool Triangulation::triangulation(
     //          - function not implemented yet;
     //          - input not valid (e.g., not enough points, point numbers don't match);
     //          - encountered failure in any step.
-    return points_3d.size() > 0;
+    return true;
 }
