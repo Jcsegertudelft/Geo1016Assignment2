@@ -26,7 +26,7 @@
 #include "matrix_algo.h"
 #include <easy3d/optimizer/optimizer_lm.h>
 
-#include "Eigen/src/Core/Matrix.h"
+//#include "Eigen/src/Core/Matrix.h"
 
 
 using namespace easy3d;
@@ -437,6 +437,33 @@ bool Triangulation::triangulation(
         R=R2;
         t=t2;
     }
+
+
+    //Error Calculation
+
+    float total_error=0.0;
+    int valid_points=0;
+
+    for (int i=0;i<points_3d.size();i++) {
+        Vector3D X = points_3d[i];
+        Vector3D X_c2 = R1 * X + t;
+        Vector3D p_homogeneous = K * X_c2;
+
+        if(std::abs(p_homogeneous.z()) > 1e-12 ) {
+            float x_coord = p_homogeneous.x()/p_homogeneous.z();
+            float y_coord = p_homogeneous.y()/p_homogeneous.z();
+
+            Vector2D p_reprojected(x_coord,y_coord);
+
+            float error = distance(p_reprojected, points_1[i]);
+            total_error += error;
+            valid_points++;
+        }
+    }
+
+    float mean_error = total_error / valid_points;
+    std::cout << "Mean Reprojection Error: " << mean_error << " pixels" << std::endl;
+
 
     // TODO: Don't forget to
     //          - write your recovered 3D points into 'points_3d' (so the viewer can visualize the 3D points for you);
