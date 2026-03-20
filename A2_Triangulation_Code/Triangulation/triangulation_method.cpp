@@ -26,8 +26,35 @@
 #include "matrix_algo.h"
 #include <easy3d/optimizer/optimizer_lm.h>
 
-
 using namespace easy3d;
+
+//Global variables for use in non-linear optimization
+Matrix34 M0;
+Matrix34 M1;
+
+Vector2D Point_data_0;
+Vector2D Point_data_1;
+
+class MyObjective : public Objective_LM {
+public:
+    MyObjective(int num_func, int num_var) : Objective_LM(num_func, num_var) {}
+    /**
+     *  Calculate the values of each function at x and return the function values as a vector in fvec.
+     *  @param  x           The current values of variables.
+     *  @param  fvec        Return the value vector of all the functions.
+     *  @return Return a negative value to terminate.
+     */
+    int evaluate(const double *x, double *fvec) {
+        Vector4D current_point(x[0],x[1],x[2],1);
+        Vector3D projection_0 = M0*current_point;
+        Vector3D projection_1 = M1*current_point;
+        fvec[0] = projection_0.cartesian().x() - Point_data_0.x();
+        fvec[1] = projection_0.cartesian().y() - Point_data_0.y();
+        fvec[2] = projection_1.cartesian().x() - Point_data_1.x();
+        fvec[3] = projection_1.cartesian().y() - Point_data_1.y();
+        return 0;
+    }
+};
 
 Matrix33 Normalization_Matrix(const std::vector<Vector2D>& points)
 {
@@ -267,11 +294,7 @@ bool Triangulation::triangulation(
     Vector3D t1 = U.get_column(2);
     Vector3D t2 = -U.get_column(2);
 
-
-    // TODO: Reconstruct 3D points. The main task is
-    //      - triangulate a pair of image points (i.e., compute the 3D coordinates for each corresponding point pair)
-
-    //Cheirality check
+    //Orientation check
     std::vector<Vector3D> points_3d_r1t1;
     std::vector<Vector3D> points_3d_r1t2;
     std::vector<Vector3D> points_3d_r2t1;
@@ -335,6 +358,7 @@ bool Triangulation::triangulation(
             count[3]++;
         }
     }
+    //Counting the votes
     int idx=0,big=0;
     for(int i=0;i<4;i++) {
         if (count[i] > big) {
@@ -342,6 +366,7 @@ bool Triangulation::triangulation(
             idx = i;
         }
     }
+    //Assignment of variables
     if (idx==0) {
         points_3d=points_3d_r1t1;
         R=R1;
@@ -373,26 +398,39 @@ bool Triangulation::triangulation(
     std::cout<<"\nR2t1 "<<count[2];
     std::cout<<"\nR2t2 "<<count[3]<<std::endl;
 
-
-    //Error Calculation
-
-    float total_squared_error=0.0;
-    int valid_points=0;
-
+    // Explicit calculation of M0 and M1
     Matrix34 P0_cam(
     1, 0, 0, 0,
     0, 1, 0, 0,
     0, 0, 1, 0
     );
-
-    Matrix34 M0 = K * P0_cam;
+    M0 = K * P0_cam;
 
     Matrix34 P1_cam(
         R(0, 0), R(0, 1), R(0, 2), t[0],
         R(1, 0), R(1, 1), R(1, 2), t[1],
         R(2, 0), R(2, 1), R(2, 2), t[2]
     );
-    Matrix34 M1 = K * P1_cam;
+    M1 = K * P1_cam;
+
+    //Non-linear least squares using Levenberg Marquardt
+    for (int i=0;i<points_3d.size();i++)
+    {
+        MyObjective obj(4,3);
+        Optimizer_LM lm;
+        std::vector<double> x = {points_3d[i].x(),points_3d[i].y(),points_3d[i].z()};
+        Point_data_0 = points_0[i];
+        Point_data_1 = points_1[i];
+
+        bool status = lm.optimize(&obj,x);
+        Vector3D new_point(x[0],x[1],x[2]);
+        points_3d[i] = new_point;
+    }
+
+    //Error Calculation
+
+    double total_squared_error=0.0;
+    int valid_points=0;
 
     for (int i=0;i<points_3d.size();i++) {
         Vector3D X = points_3d[i];
@@ -405,15 +443,15 @@ bool Triangulation::triangulation(
             Vector2D p0_reprojected = p0_homogeneous.cartesian();
             Vector2D p1_reprojected = p1_homogeneous.cartesian();
 
-            float error_0 = distance(p0_reprojected, points_0[i]);
-            float error_1 = distance(p1_reprojected, points_1[i]);
+            double error_0 = distance(p0_reprojected, points_0[i]);
+            double error_1 = distance(p1_reprojected, points_1[i]);
             total_squared_error += error_0*error_0 + error_1*error_1;
             valid_points++;
         }
     }
 
-    float mean_squared_error = total_squared_error / (2 * valid_points);
-    float RMSE = std::sqrt(mean_squared_error);
+    double mean_squared_error = total_squared_error / (2 * valid_points);
+    double RMSE = std::sqrt(mean_squared_error);
     std::cout << "RMSE: " << RMSE << " pixels" << std::endl;
 
 
