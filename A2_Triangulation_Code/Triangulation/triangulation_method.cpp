@@ -407,7 +407,7 @@ bool Triangulation::triangulation(
 
             float error_0 = distance(p0_reprojected, points_0[i]);
             float error_1 = distance(p1_reprojected, points_1[i]);
-            total_squared_error += error_0 + error_1*error_1;
+            total_squared_error += error_0*error_0 + error_1*error_1;
             valid_points++;
         }
     }
