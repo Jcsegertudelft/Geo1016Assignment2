@@ -364,6 +364,15 @@ bool Triangulation::triangulation(
         t=t2;
     }
 
+    std::cout<<"\nR1 "<<R1<<std::endl;
+    std::cout<<"\nR2 "<<R2<<std::endl;
+    std::cout<<"\nt1 "<<t1<<std::endl;
+    std::cout<<"\nt2 "<<t2<<std::endl;
+    std::cout<<"\nR1t1 "<<count[0];
+    std::cout<<"\nR1t2 "<<count[1];
+    std::cout<<"\nR2t1 "<<count[2];
+    std::cout<<"\nR2t2 "<<count[3]<<std::endl;
+
 
     //Error Calculation
 
@@ -403,7 +412,7 @@ bool Triangulation::triangulation(
         }
     }
 
-    float mean_squared_error = total_squared_error / (2*valid_points);
+    float mean_squared_error = total_squared_error / (2 * valid_points);
     float RMSE = std::sqrt(mean_squared_error);
     std::cout << "RMSE: " << RMSE << " pixels" << std::endl;
 
