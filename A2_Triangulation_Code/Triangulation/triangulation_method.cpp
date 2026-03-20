@@ -26,13 +26,8 @@
 #include "matrix_algo.h"
 #include <easy3d/optimizer/optimizer_lm.h>
 
-//#include "Eigen/src/Core/Matrix.h"
-
 
 using namespace easy3d;
-
-
-
 
 Matrix33 Normalization_Matrix(const std::vector<Vector2D>& points)
 {
@@ -226,69 +221,6 @@ bool Triangulation::triangulation(
                  "\t    - remove ALL unrelated test code, debugging code, and comments.\n"
                  "\t    - ensure that your code compiles and can reproduce your results WITHOUT ANY modification.\n\n" << std::flush;
 
-    /// Below are a few examples showing some useful data structures and APIs.
-
-    /// define a 2D vector/point
-    Vector2D b(1.1, 2.2);
-
-    /// define a 3D vector/point
-    Vector3D a(1.1, 2.2, 3.3);
-
-    /// get the Cartesian coordinates of a (a is treated as Homogeneous coordinates)
-    Vector2D p = a.cartesian();
-
-    /// get the Homogeneous coordinates of p
-    Vector3D q = p.homogeneous();
-
-    /// define a 3 by 3 matrix (and all elements initialized to 0.0)
-    Matrix33 A;
-
-    /// define and initialize a 3 by 3 matrix
-    Matrix33 T(1.1, 2.2, 3.3,
-               0, 2.2, 3.3,
-               0, 0, 1);
-
-    /// define and initialize a 3 by 4 matrix
-    Matrix34 M(1.1, 2.2, 3.3, 0,
-               0, 2.2, 3.3, 1,
-               0, 0, 1, 1);
-
-    /// set first row by a vector
-    M.set_row(0, Vector4D(1.1, 2.2, 3.3, 4.4));
-
-    /// set second column by a vector
-    M.set_column(1, Vector3D(5.5, 5.5, 5.5));
-
-    /// define a 15 by 9 matrix (and all elements initialized to 0.0)
-    Matrix WH(15, 9, 0.0);
-    /// set the first row by a 9-dimensional vector
-    WH.set_row(0, {0, 1, 2, 3, 4, 5, 6, 7, 8}); // {....} is equivalent to a std::vector<double>
-
-    /// get the number of rows.
-    int num_rows = WH.rows();
-
-    /// get the number of columns.
-    int num_cols = WH.cols();
-
-    /// get the the element at row 1 and column 2
-    double value = WH(1, 2);
-
-    /// get the last column of a matrix
-    Vector last_column = WH.get_column(WH.cols() - 1);
-
-    /// define a 3 by 3 identity matrix
-    Matrix33 I = Matrix::identity(3, 3, 1.0);
-
-    /// matrix-vector product
-    Vector3D v = M * Vector4D(1, 2, 3, 4); // M is 3 by 4
-
-    ///For more functions of Matrix and Vector, please refer to 'matrix.h' and 'vector.h'
-
-    // TODO: delete all above example code in your final submission
-
-    //--------------------------------------------------------------------------------------------------------------
-    // implementation starts ...
-
     // Input validity check
     if (points_0.size() != points_1.size()){
         std::cerr << "Sizes of Matching points don't match" << std::endl;
@@ -300,11 +232,6 @@ bool Triangulation::triangulation(
         return false;
     }
 
-    // TODO: Estimate relative pose of two views. This can be subdivided into
-    //      - estimate the fundamental matrix F; DONE
-    //      - compute the essential matrix E;
-    //      - recover rotation R and t.
-
     //Normalize the points and obtain the Matrices needed for denormalization
     Matrix33 T0 = Normalization_Matrix(points_0);
     std::vector<Vector2D> norm_points_0 = Normalize_points(points_0, T0);
@@ -314,7 +241,6 @@ bool Triangulation::triangulation(
     //Estimate the normalized fundamental matrix and denormalize it
     Matrix33 F_norm = EstimateFundamentalMatrix(norm_points_0, norm_points_1);
     Matrix33 F = T1.transpose() * F_norm * T0;
-    std::cout << F << std::endl;
 
     //Construct the matrix K, same for both cameras
     Matrix33 K(fx, s, cx,
@@ -441,28 +367,45 @@ bool Triangulation::triangulation(
 
     //Error Calculation
 
-    float total_error=0.0;
+    float total_squared_error=0.0;
     int valid_points=0;
+
+    Matrix34 P0_cam(
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0
+    );
+
+    Matrix34 M0 = K * P0_cam;
+
+    Matrix34 P1_cam(
+        R(0, 0), R(0, 1), R(0, 2), t[0],
+        R(1, 0), R(1, 1), R(1, 2), t[1],
+        R(2, 0), R(2, 1), R(2, 2), t[2]
+    );
+    Matrix34 M1 = K * P1_cam;
 
     for (int i=0;i<points_3d.size();i++) {
         Vector3D X = points_3d[i];
-        Vector3D X_c2 = R1 * X + t;
-        Vector3D p_homogeneous = K * X_c2;
+        Vector4D X_homogeneous = X.homogeneous();
 
-        if(std::abs(p_homogeneous.z()) > 1e-12 ) {
-            float x_coord = p_homogeneous.x()/p_homogeneous.z();
-            float y_coord = p_homogeneous.y()/p_homogeneous.z();
+        Vector3D p0_homogeneous = M0 * X_homogeneous;
+        Vector3D p1_homogeneous = M1 * X_homogeneous;
 
-            Vector2D p_reprojected(x_coord,y_coord);
+        if(std::abs(p1_homogeneous.z()) > 1e-12 && p0_homogeneous.z() > 1e-12) {
+            Vector2D p0_reprojected = p0_homogeneous.cartesian();
+            Vector2D p1_reprojected = p1_homogeneous.cartesian();
 
-            float error = distance(p_reprojected, points_1[i]);
-            total_error += error;
+            float error_0 = distance(p0_reprojected, points_0[i]);
+            float error_1 = distance(p1_reprojected, points_1[i]);
+            total_squared_error += error_0 + error_1*error_1;
             valid_points++;
         }
     }
 
-    float mean_error = total_error / valid_points;
-    std::cout << "Mean Reprojection Error: " << mean_error << " pixels" << std::endl;
+    float mean_squared_error = total_squared_error / (2*valid_points);
+    float RMSE = std::sqrt(mean_squared_error);
+    std::cout << "RMSE: " << RMSE << " pixels" << std::endl;
 
 
     // TODO: Don't forget to
