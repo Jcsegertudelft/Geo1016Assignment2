@@ -211,7 +211,6 @@ std::vector<Vector3D> TriangulateAllPoints(
     return reconstructed_points;
 }
 /**
- * TODO: Finish this function for reconstructing 3D geometry from corresponding image points.
  * @return True on success, otherwise false. On success, the reconstructed 3D points must be written to 'points_3d'
  *      and the recovered relative pose must be written to R and t.
  */
@@ -225,28 +224,6 @@ bool Triangulation::triangulation(
         Matrix33 &R,   /// output: 3 by 3 matrix, which is the recovered rotation of the 2nd camera
         Vector3D &t    /// output: 3D vector, which is the recovered translation of the 2nd camera
 ) const {
-    /// NOTE: there might be multiple workflows for reconstructing 3D geometry from corresponding image points.
-    ///       This assignment uses the commonly used one explained in our lecture.
-    ///       It is advised to define a function for the sub-tasks. This way you have a clean and well-structured
-    ///       implementation, which also makes testing and debugging easier. You can put your other functions above
-    ///       'triangulation()'.
-
-    std::cout << "\nTODO: implement the 'triangulation()' function in the file 'Triangulation/triangulation_method.cpp'\n\n";
-
-    std::cout << "[Liangliang]:\n"
-                 "\tSimilar to the first assignment, basic linear algebra data structures and functions are provided in\n"
-                 "\tthe following files:\n"
-                 "\t    - Triangulation/matrix.h: handles matrices of arbitrary dimensions and related functions.\n"
-                 "\t    - Triangulation/vector.h: manages vectors of arbitrary sizes and related functions.\n"
-                 "\t    - Triangulation/matrix_algo.h: contains functions for determinant, inverse, SVD, linear least-squares...\n"
-                 "\tFor more details about these data structures and a complete list of related functions, please\n"
-                 "\trefer to the header files mentioned above.\n\n"
-                 "\tIf you choose to implement the non-linear method for triangulation (optional task). Please\n"
-                 "\trefer to 'Tutorial_NonlinearLeastSquares/main.cpp' for an example and some explanations.\n\n"
-                 "\tFor your final submission, adhere to the following guidelines:\n"
-                 "\t    - submit ONLY the 'Triangulation/triangulation_method.cpp' file.\n"
-                 "\t    - remove ALL unrelated test code, debugging code, and comments.\n"
-                 "\t    - ensure that your code compiles and can reproduce your results WITHOUT ANY modification.\n\n" << std::flush;
 
     // Input validity check
     if (points_0.size() != points_1.size()){
@@ -428,7 +405,6 @@ bool Triangulation::triangulation(
     }
 
     //Error Calculation
-
     double total_squared_error=0.0;
     int valid_points=0;
 
@@ -454,16 +430,5 @@ bool Triangulation::triangulation(
     double RMSE = std::sqrt(mean_squared_error);
     std::cout << "RMSE: " << RMSE << " pixels" << std::endl;
 
-
-    // TODO: Don't forget to
-    //          - write your recovered 3D points into 'points_3d' (so the viewer can visualize the 3D points for you);
-    //          - write the recovered relative pose into R and t (the view will be updated as seen from the 2nd camera,
-    //            which can help you check if R and t are correct).
-    //       You must return either 'true' or 'false' to indicate whether the triangulation was successful (so the
-    //       viewer will be notified to visualize the 3D points and update the view).
-    //       There are a few cases you should return 'false' instead, for example:
-    //          - function not implemented yet;
-    //          - input not valid (e.g., not enough points, point numbers don't match);
-    //          - encountered failure in any step.
     return true;
 }
